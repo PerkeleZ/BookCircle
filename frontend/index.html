@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>(function(){var t=localStorage.getItem("bc_theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",t);document.documentElement.setAttribute("data-bs-theme",t);})();</script>
+<title>BookCircle — книжный клуб и обмен книгами</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,500;7..72,700&family=Manrope:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config = { corePlugins: { preflight: false, container: false, visibility: false } }; // не ломаем стили Bootstrap</script>
+<style>
+:root{--ink:#1c2b33;--paper:#f0f3f1;--card:#fff;--muted:#66777f;--nav:#1c2b33;--pine:#1f6f62;--pine-d:#17544a;--gold:#c9962b;--star-off:#c5cfcb;--line:#d5ddd9}
+[data-theme=dark]{--ink:#e6edf0;--paper:#11171a;--card:#1a2327;--muted:#9aa9b0;--nav:#0b1012;--pine:#2a8a7a;--pine-d:#23766a;--gold:#e0b04a;--star-off:#3b4a50;--line:#2b383e;--bs-body-bg:#11171a;--bs-body-color:#e6edf0;--bs-border-color:#2b383e;--bs-secondary-color:#9aa9b0}
+body{font-family:Manrope,system-ui,sans-serif;background:var(--paper);color:var(--ink)}
+h1,h2,h3,.brand{font-family:Literata,Georgia,serif}
+.navbar{background:var(--nav)}
+.brand{color:#fff;font-weight:700;font-size:1.3rem;text-decoration:none;margin-right:1.5rem}
+.nav-link{color:#c9d6d1!important}.nav-link.active,.nav-link:hover{color:#fff!important}
+.btn-pine{background:var(--pine);color:#fff;border:0}.btn-pine:hover{background:var(--pine-d);color:#fff}
+.btn:focus-visible,a:focus-visible,.form-control:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.cover{aspect-ratio:2/3;object-fit:cover;background:linear-gradient(160deg,#2c4a52,#1f6f62);border-radius:4px 10px 10px 4px;box-shadow:inset 6px 0 0 rgba(0,0,0,.18)}
+.cover-ph{display:flex;align-items:center;justify-content:center;color:#e8f0ed;font-family:Literata,serif;padding:.6rem;text-align:center;font-size:.9rem}
+.card-book{background:var(--card);border:1px solid var(--line);border-radius:8px}
+.stars{white-space:nowrap;letter-spacing:1px}
+.st{display:inline-block;background:linear-gradient(90deg,var(--gold) var(--f,0%),var(--star-off) var(--f,0%));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+.star-input{display:inline-flex;align-items:center}
+.st-slot{position:relative;display:inline-block;font-size:2rem;line-height:1;margin-right:2px}
+.st-slot .half{position:absolute;top:0;bottom:0;width:50%;opacity:0;cursor:pointer;border:0;padding:0;background:none}
+.st-slot .half.l{left:0}.st-slot .half.r{right:0}
+.st-slot .half:focus-visible{opacity:1;outline:3px solid var(--gold);background:rgba(201,150,43,.25)}
+.panel .list-group-item{background:transparent;border-color:var(--line)}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:8px}
+.spinner-wrap{padding:3rem;text-align:center;color:var(--muted)}
+/* Tailwind-класс .collapse (visibility:collapse) конфликтует с Bootstrap .collapse и прячет меню навбара */
+.collapse{visibility:visible!important}
+#toast{position:fixed;right:1rem;bottom:1rem;z-index:2000;max-width:22rem}
+@media(max-width:576px){.hide-sm{display:none}}
+</style>
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-dark">
+  <div class="container">
+    <a class="brand" href="#/">BookCircle</a>
+    <button class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#nav" aria-label="Меню"><span class="navbar-toggler-icon"></span></button>
+    <div class="collapse navbar-collapse" id="nav"><ul class="navbar-nav me-auto" id="menu"></ul><div id="auth-box" class="flex items-center gap-2"></div></div>
+  </div>
+</nav>
+<div class="container pt-3" id="alerts"></div>
+<main class="container py-4" id="app" aria-live="polite"></main>
+<div id="toast"></div>
+<div class="modal fade" id="cm" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title" id="cm-title"></h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button></div>
+  <div class="modal-body" id="cm-body"></div>
+  <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button><button type="button" class="btn btn-pine" id="cm-ok"></button></div>
+</div></div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+/* ===================== НАСТРОЙКИ ===================== */
+const API = window.BOOKCIRCLE_API || (location.protocol === 'file:' ? 'http://127.0.0.1:8000/api' : '/api');  // сайт и API на одном адресе (Django / Docker)
+const PAGE = 8;                            // элементов на странице
+
+/* ===================== УТИЛИТЫ ===================== */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const app = $('#app');
+let me = null;
+let alertState = {count: 0, overdue: 0, results: []};
+let rid = 0;  // номер текущей навигации: ответы устаревших страниц не должны затирать новую
+const LOAN = {pending:['Ожидает','warning'],accepted:['Принята','info'],rejected:['Отклонена','secondary'],cancelled:['Отменена','secondary'],handed_over:['Передана','primary'],returned:['Возвращена','success']};
+const READ = {want:'Хочу прочитать',reading:'Читаю',done:'Прочитал'};
+const COND = {new:'Новое',good:'Хорошее',fair:'Среднее',worn:'Потрёпанное'};
+
+function toast(msg, type = 'success') {
+  const t = $('#toast');
+  t.innerHTML = `<div class="alert alert-${type} shadow-sm">${esc(msg)}</div>`;
+  clearTimeout(toast.h); toast.h = setTimeout(() => t.innerHTML = '', 3500);
+}
+async function api(path, {method = 'GET', body} = {}) {
+  const h = {'Content-Type': 'application/json'};
+  const tk = localStorage.getItem('bc_token');
+  if (tk && !/^\/auth\/(login|register|password-reset|google\/$|google\/config)/.test(path)) h.Authorization = 'Token ' + tk;  // устаревший токен не должен мешать входу
+  const r0 = rid, stale = () => r0 !== rid && !path.startsWith('/auth/');
+  let r;
+  try { r = await fetch(API + path, {method, headers: h, body: body ? JSON.stringify(body) : undefined}); }
+  catch { if (stale()) return new Promise(() => {}); throw {status: 0, data: {detail: 'Сервер недоступен. Проверьте, что Django запущен и адрес API указан верно.'}}; }
+  const data = r.status === 204 ? null : await r.json().catch(() => null);
+  if (stale()) return new Promise(() => {});  // пользователь уже ушёл на другую страницу
+  if (!r.ok) throw {status: r.status, data};
+  return data;
+}
+const errText = e => e?.data?.detail || e?.data?.error || 'Не удалось выполнить действие. Попробуйте ещё раз.';
+function fieldErrors(form, e) {
+  form.querySelectorAll('.invalid-feedback').forEach(x => x.remove());
+  form.querySelectorAll('.is-invalid').forEach(x => x.classList.remove('is-invalid'));
+  const d = e?.data || {}; let shown = false;
+  for (const [k, v] of Object.entries(d)) {
+    const inp = form.elements[k]; if (!inp) continue;
+    inp.classList.add('is-invalid');
+    const div = document.createElement('div'); div.className = 'invalid-feedback';
+    div.textContent = [].concat(v).join(' '); inp.after(div); shown = true;
+  }
+  if (!shown) toast(errText(e), 'danger');
+}
+async function submit(form, fn) {
+  form.addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const btn = form.querySelector('button:not([type=button]):not(.btn-close)'); if (btn) btn.disabled = true;
+    try { await fn(Object.fromEntries(new FormData(form))); }
+    catch (e) { if (e.status === 401) return go('/login'); fieldErrors(form, e); }
+    if (btn) btn.disabled = false;
+  });
+}
+const loading = () => { cleanupModals(); return app.innerHTML = '<div class="spinner-wrap"><div class="spinner-border text-success"></div><div class="mt-2">Загрузка…</div></div>'; };
+const empty = (t, s = '') => `<div class="panel p-5 text-center"><h3 class="h5">${t}</h3><p class="text-secondary mb-0">${s}</p></div>`;
+const fmtScore = n => String(Math.round(Number(n) * 10) / 10).replace('.', ',');  // 3.5 -> «3,5»
+const starsHtml = n => { const r = Math.round(Number(n) * 2) / 2; return `<span class="stars" role="img" aria-label="Оценка ${fmtScore(n)} из 5">${[1, 2, 3, 4, 5].map(i => `<span class="st" style="--f:${r >= i ? 100 : r >= i - 0.5 ? 50 : 0}%">★</span>`).join('')}</span>`; };
+const stars = n => n ? `${starsHtml(n)} <small class="text-secondary">${fmtScore(n)}</small>` : '<small class="text-secondary">Нет оценок</small>';
+const starInput = (name, value) => `<div class="star-input" data-star><input type="hidden" name="${name}" value="${value || ''}"><span class="stars">${[1, 2, 3, 4, 5].map(i => `<span class="st-slot"><span class="st" style="--f:0%">★</span><button type="button" class="half l" data-v="${i - 0.5}" aria-label="${fmtScore(i - 0.5)} из 5"></button><button type="button" class="half r" data-v="${i}" aria-label="${i} из 5"></button></span>`).join('')}</span><span class="small text-secondary ms-2" data-val></span></div>`;
+function initStarInput(root) {
+  root.querySelectorAll('[data-star]').forEach(w => {
+    const inp = w.querySelector('input');
+    const paint = v => { w.querySelectorAll('.st').forEach((el, i) => el.style.setProperty('--f', (v >= i + 1 ? 100 : v >= i + 0.5 ? 50 : 0) + '%')); w.querySelector('[data-val]').textContent = v ? fmtScore(v) + ' из 5' : 'выберите оценку'; };
+    paint(+inp.value || 0);
+    w.querySelectorAll('.half').forEach(b => { b.onclick = () => { inp.value = b.dataset.v; paint(+b.dataset.v); }; b.onmouseenter = () => paint(+b.dataset.v); b.onmouseleave = () => paint(+inp.value || 0); });
+  });
+}
+const cover = b => b.cover ? `<img class="cover w-100" src="${esc(b.cover)}" alt="Обложка «${esc(b.title)}»" loading="lazy">` : `<div class="cover cover-ph w-100">${esc(b.title)}</div>`;
+const go = p => location.hash = '#' + p;
+const list = d => Array.isArray(d) ? {results: d, count: d.length} : d;
+function pager(count, page, base) {
+  const n = Math.ceil(count / PAGE); if (n < 2) return '';
+  return `<nav class="mt-4"><ul class="pagination justify-content-center">${Array.from({length: n}, (_, i) =>
+    `<li class="page-item ${i + 1 === page ? 'active' : ''}"><a class="page-link" href="#${base}${base.includes('?') ? '&' : '?'}page=${i + 1}">${i + 1}</a></li>`).join('')}</ul></nav>`;
+}
+const isMod = () => me && ['moderator', 'admin'].includes(me.role);
+
+const isAdmin = () => me && me.role === 'admin';
+
+function cleanupModals() {  // «залипший» фон, если окно закрылось одновременно с перерисовкой страницы
+  setTimeout(() => { if (!document.querySelector('.modal.show')) { document.querySelectorAll('.modal-backdrop').forEach(e => e.remove()); document.body.classList.remove('modal-open'); document.body.style.removeProperty('padding-right'); } }, 450);
+}
+
+/* Окно подтверждения в стиле сайта. Возвращает null (отмена) или {value} (подтверждено; value — текст из поля, если оно есть). */
+function confirmDialog({title = 'Подтвердите действие', text = '', ok = 'Подтвердить', danger = false, input = ''}) {
+  return new Promise(resolve => {
+    const el = $('#cm'), m = bootstrap.Modal.getOrCreateInstance(el); let done = false;
+    $('#cm-title').textContent = title;
+    $('#cm-body').innerHTML = `<p class="mb-0">${esc(text)}</p>${input ? `<label class="form-label mt-3" for="cm-input">${esc(input)}</label><textarea class="form-control" id="cm-input" rows="2" maxlength="300"></textarea>` : ''}`;
+    const okb = $('#cm-ok'); okb.textContent = ok; okb.className = 'btn ' + (danger ? 'btn-danger' : 'btn-pine');
+    const finish = v => { if (!done) { done = true; resolve(v); } };
+    okb.onclick = () => { finish({value: input ? $('#cm-input').value : ''}); m.hide(); };
+    el.addEventListener('hidden.bs.modal', () => finish(null), {once: true});
+    m.show();
+  });
+}
+
+function toggleTheme() {
+  const t = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', t); document.documentElement.setAttribute('data-bs-theme', t);
+  localStorage.setItem('bc_theme', t); renderNav();
+}
+
+/* Отслеживание аренды: предупреждения о просроченных и скоро истекающих сроках (получателю и владельцу) */
+function renderAlerts() {
+  const box = $('#alerts'); if (!box) return;
+  if (!me || !alertState.count) { box.innerHTML = ''; return; }
+  const items = alertState.results.slice(0, 4).map(a => {
+    const t = esc(a.book_title), who = esc(a.other), n = Math.abs(a.days_left);
+    const tel = a.other_phone ? ` Телефон: <a href="tel:${esc(a.other_phone)}">${esc(a.other_phone)}</a>.` : '';
+    const when = a.days_left === 0 ? 'сегодня' : `через ${n} дн.`;
+    if (a.overdue) return a.role === 'borrower'
+      ? `<div class="alert alert-danger mb-2"><strong>Просрочен возврат «${t}»</strong> — верните книгу владельцу ${who}, просрочка ${n} дн.${tel}</div>`
+      : `<div class="alert alert-danger mb-2"><strong>«${t}» не возвращена вовремя</strong> — ${who} задерживает книгу уже ${n} дн.${tel}</div>`;
+    return a.role === 'borrower'
+      ? `<div class="alert alert-warning mb-2">Срок возврата «${t}» — ${when}. Верните книгу владельцу ${who}.${tel}</div>`
+      : `<div class="alert alert-warning mb-2">${who} должен вернуть «${t}» ${when}.${tel}</div>`;
+  }).join('');
+  const more = alertState.count > 4 ? ` (и ещё ${alertState.count - 4})` : '';
+  box.innerHTML = items + `<div class="small mb-2"><a href="#/loans?box=active">Все книги на руках${more}</a></div>`;
+}
+async function refreshAlerts() {
+  if (!me) { alertState = {count: 0, overdue: 0, results: []}; return renderAlerts(); }
+  try { alertState = await api('/alerts/'); } catch { return; }
+  renderAlerts(); renderNav();
+}
+
+/* ===================== ШАПКА ===================== */
+function renderNav() {
+  const links = [['/', 'Каталог']];
+  if (me) links.push(['/shelf', 'Моя полка'], ['/loans', 'Обмены'], ['/meetings', 'Встречи'], ['/reading', 'Моё чтение'], ['/submit', 'Предложить книгу']);
+  if (isMod()) links.push(['/moderation', 'Модерация']);
+  const cur = location.hash.slice(1) || '/';
+  const badge = h => h !== '/loans' ? '' : alertState.overdue ? ` <span class="badge text-bg-danger">${alertState.overdue}</span>` : alertState.count ? ' <span class="badge text-bg-warning">!</span>' : '';
+  $('#menu').innerHTML = links.map(([h, t]) => `<li class="nav-item"><a class="nav-link ${cur.split('?')[0] === h ? 'active' : ''}" href="#${h}">${t}${badge(h)}</a></li>`).join('');
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  $('#auth-box').innerHTML = `<button class="btn btn-sm btn-outline-light" id="theme-btn" aria-label="Переключить тему" title="${dark ? 'Светлая тема' : 'Тёмная тема'}">${dark ? '☀' : '☾'}</button>` + (me
+    ? `<a class="btn btn-sm btn-outline-light" href="#/profile">${esc(me.username)}</a><button class="btn btn-sm btn-pine" id="logout">Выйти</button>`
+    : `<a class="btn btn-sm btn-outline-light" href="#/login">Войти</a><a class="btn btn-sm btn-pine" href="#/register">Регистрация</a>`);
+  $('#theme-btn').onclick = toggleTheme;
+  $('#logout')?.addEventListener('click', async () => {
+    if (!await confirmDialog({title: 'Выйти из аккаунта?', text: 'Чтобы вернуться, нужно будет войти снова.', ok: 'Выйти'})) return;
+    try { await api('/auth/logout/', {method: 'POST'}); } catch {}
+    localStorage.removeItem('bc_token'); me = null; alertState = {count: 0, overdue: 0, results: []}; renderAlerts();
+    go('/'); renderNav(); toast('Вы вышли из аккаунта');
+  });
+}
+
+/* ===================== СТРАНИЦЫ ===================== */
+const bookCard = (b, reason) => `
+    <a href="#/book/${b.id}" class="card-book p-2 text-decoration-none text-reset block">
+      ${cover(b)}<div class="p-2"><div class="fw-bold">${esc(b.title)}</div><div class="small text-secondary">${esc(b.author)} · ${esc(b.genre)}</div>
+      <div class="mt-1">${stars(b.avg_rating)}</div>
+      <span class="badge ${b.available_copies ? 'text-bg-success' : 'text-bg-secondary'} mt-1">${b.available_copies ? 'Доступно: ' + b.available_copies : 'Нет свободных'}</span>
+      ${reason ? `<div class="small text-success mt-1">${esc(reason)}</div>` : ''}</div></a>`;
+const fmtDt = s => new Date(s).toLocaleString('ru-RU', {dateStyle: 'long', timeStyle: 'short'});
+
+async function pCatalog(q) {
+  const page = +q.get('page') || 1, s = q.get('search') || '', g = q.get('genre') || '';
+  loading();
+  const d = list(await api(`/books/?search=${encodeURIComponent(s)}&genre=${encodeURIComponent(g)}&page=${page}&page_size=${PAGE}`));
+  const genres = ['', ...(await api('/genres/')).results];
+  const rec = me && page === 1 && !s && !g ? await api('/recommendations/').catch(() => null) : null;
+  app.innerHTML = `
+  <h1 class="h2 mb-1">Каталог книг</h1><p class="text-secondary">Найдите книгу и запросите её у соседа по клубу.</p>
+  <form class="flex flex-wrap gap-2 mb-4" id="f">
+    <input class="form-control" style="max-width:340px" name="search" placeholder="Название или автор" value="${esc(s)}">
+    <select class="form-select" style="max-width:200px" name="genre">${genres.map(x => `<option value="${x}" ${x === g ? 'selected' : ''}>${x || 'Все жанры'}</option>`).join('')}</select>
+    <button class="btn btn-pine">Найти</button></form>
+  ${rec && rec.results.length ? `<div class="mb-4"><h2 class="h5 mb-1">Рекомендуем вам</h2><p class="small text-secondary">${rec.genres.length ? 'По вашим жанрам: ' + rec.genres.map(x => esc(x.genre)).join(', ') + '.' : 'Пока мало данных о ваших вкусах — вот что популярно в клубе. Отмечайте прочитанное и ставьте оценки, и подборка станет точнее.'}</p><div class="grid grid-cols-2 md:grid-cols-4 gap-4">${rec.results.slice(0, 4).map(b => bookCard(b, b.reason)).join('')}</div></div><h2 class="h5">Все книги</h2>` : ''}
+  ${d.results.length ? `<div class="grid grid-cols-2 md:grid-cols-4 gap-4">${d.results.map(b => bookCard(b)).join('')}</div>`
+    : (s || g ? empty('Ничего не найдено', 'Измените запрос или сбросьте жанр.') : empty('Каталог пока пуст', 'Модератор добавит книги в разделе «Модерация». При локальном запуске выполните: python manage.py seed'))}
+  ${pager(d.count, page, `/?search=${encodeURIComponent(s)}&genre=${encodeURIComponent(g)}`)}`;
+  $('#f').addEventListener('submit', e => { e.preventDefault(); const f = new FormData(e.target); go(`/?search=${encodeURIComponent(f.get('search'))}&genre=${encodeURIComponent(f.get('genre'))}`); });
+}
+
+async function pBook(id) {
+  loading();
+  const b = await api(`/books/${id}/`);
+  const copies = b.copies || [], reviews = b.reviews || [];
+  const [mtd, gen] = me ? await Promise.all([api(`/meetings/?book=${id}&page_size=5`).catch(() => null), api('/genres/').catch(() => ({results: []}))]) : [null, {results: []}];
+  const mts = mtd?.results || [];
+  const today = new Date().toISOString().slice(0, 10);
+  const open = b.is_mine && ['pending', 'rejected'].includes(b.status), direct = me && (isMod() || open);
+  const ST = {pending: ['warning', 'На модерации'], rejected: ['danger', 'Отклонена'], hidden: ['secondary', 'Скрыта']};
+  const banner = {pending: ['warning', 'Книга на модерации: пока она видна только вам и модераторам.'],
+    rejected: ['danger', 'Книга отклонена модератором' + (b.reject_reason ? ': ' + b.reject_reason : '') + '. Исправьте данные — после сохранения она снова уйдёт на модерацию.'],
+    hidden: ['secondary', 'Книга скрыта и не показывается в каталоге.']}[b.status];
+  const actions = me ? `<div class="flex flex-wrap gap-2 mt-3">
+    ${direct ? '<button class="btn btn-sm btn-outline-secondary" data-bk="edit">Редактировать</button>' : (b.status === 'approved' ? '<button class="btn btn-sm btn-outline-secondary" data-bk="edit">Предложить правку</button>' : '')}
+    ${isMod() && b.status === 'approved' ? '<button class="btn btn-sm btn-outline-secondary" data-bk="hide">Скрыть из каталога</button>' : ''}
+    ${isMod() && b.status === 'hidden' ? '<button class="btn btn-sm btn-outline-success" data-bk="unhide">Вернуть в каталог</button>' : ''}
+    ${isAdmin() || open ? '<button class="btn btn-sm btn-outline-danger" data-bk="delete">Удалить книгу</button>' : ''}</div>` : '';
+  app.innerHTML = `
+  ${banner ? `<div class="alert alert-${banner[0]}">${esc(banner[1])}</div>` : ''}
+  <div class="grid md:grid-cols-[220px_1fr] gap-6">
+    <div>${cover(b)}</div>
+    <div><h1 class="h2 mb-0">${esc(b.title)} ${ST[b.status] ? `<span class="badge text-bg-${ST[b.status][0]} fs-6 align-middle">${ST[b.status][1]}</span>` : ''}</h1>
+      <div class="text-secondary mb-2">${esc(b.author)} · ${esc(b.genre)}</div>
+      <div class="mb-3">${stars(b.avg_rating)} <span class="badge bg-body-secondary text-body border ms-2">Прочитали в этом месяце: ${b.read_this_month ?? 0}</span></div>
+      <p style="max-width:65ch">${esc(b.description)}</p>
+      ${me && b.status === 'approved' ? `<div class="flex items-center gap-2"><label class="small text-secondary" for="rs">Мой статус:</label>
+        <select id="rs" class="form-select form-select-sm" style="width:auto"><option value="">—</option>${Object.entries(READ).map(([k, v]) => `<option value="${k}" ${b.my_reading === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>` : ''}
+      ${actions}
+    </div></div>
+  <h2 class="h4 mt-5">Экземпляры</h2>
+  ${copies.length ? `<div class="panel"><ul class="list-group list-group-flush">${copies.map(c => `
+    <li class="list-group-item flex flex-wrap items-center justify-between gap-2">
+      <div><strong>${esc(c.owner)}</strong> · ${esc(COND[c.condition] || c.condition)}<div class="small text-secondary">Место передачи: ${esc(c.pickup_place)}</div></div>
+      ${c.is_available ? (me && me.username !== c.owner ? `<button class="btn btn-sm btn-pine" data-req="${c.id}">Запросить</button>` : '<span class="badge text-bg-success">Доступно</span>') : '<span class="badge text-bg-secondary">Занято</span>'}
+    </li>`).join('')}</ul></div>` : empty('Пока нет экземпляров', 'Добавьте свой на странице «Моя полка».')}
+  ${mts.length ? `<h2 class="h4 mt-5">Встречи по этой книге</h2><div class="panel"><ul class="list-group list-group-flush">${mts.map(m => `<li class="list-group-item flex flex-wrap items-center justify-between gap-2"><div><strong>${esc(m.title)}</strong><div class="small text-secondary">${esc(fmtDt(m.starts_at))} · ${esc(m.place)}</div></div><a class="btn btn-sm btn-outline-success" href="#/meetings">Подробнее</a></li>`).join('')}</ul></div>` : ''}
+  <h2 class="h4 mt-5">Отзывы</h2>
+  ${reviews.length ? reviews.map(r => `<div class="panel p-3 mb-2 ${r.is_mine ? 'border-success' : ''}"><div class="flex justify-between items-center gap-2"><strong>${esc(r.user)}${r.is_mine ? ' <span class="badge text-bg-success">Ваш отзыв</span>' : ''}</strong>
+      <span class="flex items-center gap-2">${starsHtml(r.score)}<small class="text-secondary">${fmtScore(r.score)}</small>
+      ${r.is_mine ? '<button class="btn btn-sm btn-outline-secondary" data-edit-review>Изменить</button><button class="btn btn-sm btn-outline-danger" data-del-review="mine" data-own="1">Удалить</button>' : (isAdmin() ? `<button class="btn btn-sm btn-outline-danger" data-del-review="${r.id}" data-own="0">Удалить</button>` : '')}</span></div>
+      <div>${esc(r.text)}</div></div>`).join('') : empty('Отзывов пока нет')}
+  ${b.my_review?.is_hidden ? '<div class="alert alert-warning">Ваш отзыв скрыт модератором. Вы можете его изменить или удалить, но он останется скрытым, пока модератор его не вернёт.</div>' : ''}
+  ${me && b.status === 'approved' ? `<form id="rv" class="panel p-3 mt-3" novalidate><h3 class="h6">${b.my_review ? 'Редактирование вашего отзыва' : 'Оставить отзыв'}</h3>
+    <div class="mb-2">${starInput('score', b.my_review?.score)}</div>
+    <textarea class="form-control" name="text" rows="2" placeholder="Что вы думаете о книге?">${esc(b.my_review?.text || '')}</textarea>
+    <button class="btn btn-pine mt-2">${b.my_review ? 'Сохранить изменения' : 'Опубликовать отзыв'}</button>
+    ${b.my_review ? '<button type="button" class="btn btn-outline-danger mt-2 ms-2" data-del-review="mine" data-own="1">Удалить отзыв</button>' : ''}</form>` : (!me ? '<p class="mt-3"><a href="#/login">Войдите</a>, чтобы запросить книгу или оставить отзыв.</p>' : '')}
+  <div class="modal fade" id="rq"><div class="modal-dialog"><form class="modal-content" id="rqf" novalidate><div class="modal-header"><h5 class="modal-title">Запрос книги</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body"><label class="form-label">Когда вернёте?</label><input type="date" class="form-control mb-3" name="requested_return_date" min="${today}">
+      <label class="form-label">Ваш телефон для связи</label><input type="tel" class="form-control" name="phone" value="${esc(me?.phone || '')}" placeholder="+996 555 123 456">
+      <div class="form-text">Номер увидит только владелец книги — чтобы договориться о передаче.</div></div>
+    <div class="modal-footer"><button class="btn btn-pine">Отправить запрос</button></div></form></div></div>
+  ${me ? `<div class="modal fade" id="be"><div class="modal-dialog"><form class="modal-content" id="bef" novalidate><div class="modal-header"><h5 class="modal-title">${direct ? 'Редактировать книгу' : 'Предложить правку'}</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">${direct ? '' : '<p class="small text-secondary">Правка вступит в силу после проверки модератором.</p>'}
+      <label class="form-label">Название</label><input class="form-control mb-2" name="title" value="${esc(b.title)}">
+      <label class="form-label">Автор</label><input class="form-control mb-2" name="author" value="${esc(b.author)}">
+      <label class="form-label">Жанр</label><input class="form-control mb-2" name="genre" list="gl2" value="${esc(b.genre)}" autocomplete="off"><datalist id="gl2">${gen.results.map(x => `<option value="${esc(x)}">`).join('')}</datalist>
+      <label class="form-label">URL обложки</label><input class="form-control mb-2" name="cover" value="${esc(b.cover)}">
+      <label class="form-label">Описание</label><textarea class="form-control" name="description" rows="4">${esc(b.description)}</textarea></div>
+    <div class="modal-footer"><button class="btn btn-pine">${direct ? 'Сохранить' : 'Отправить на проверку'}</button></div></form></div></div>` : ''}`;
+  initStarInput(app);
+  let copyId = null; const modal = bootstrap.Modal.getOrCreateInstance($('#rq')), em = $('#be') ? bootstrap.Modal.getOrCreateInstance($('#be')) : null;
+  app.querySelectorAll('[data-req]').forEach(x => x.onclick = () => { copyId = x.dataset.req; modal.show(); });
+  $('#rs')?.addEventListener('change', async e => { if (!e.target.value) return; try { await api(`/reading/${id}/`, {method: 'PUT', body: {status: e.target.value}}); toast('Статус сохранён'); } catch (er) { toast(errText(er), 'danger'); } });
+  submit($('#rqf'), async d => { await api(`/copies/${copyId}/loans/`, {method: 'POST', body: d}); modal.hide(); toast('Запрос отправлен владельцу'); pBook(id); });
+  app.querySelectorAll('[data-bk]').forEach(x => x.onclick = async () => {
+    const act = x.dataset.bk;
+    if (act === 'edit') return em.show();
+    if (act === 'hide' || act === 'unhide') {
+      try { await api(`/books/${id}/${act}/`, {method: 'POST'}); toast(act === 'hide' ? 'Книга скрыта из каталога' : 'Книга возвращена в каталог'); pBook(id); } catch (e) { toast(errText(e), 'danger'); }
+      return;
+    }
+    if (!await confirmDialog({title: 'Удалить книгу?', danger: true, ok: 'Удалить',
+      text: isAdmin() ? 'Будут удалены сама книга, её экземпляры, отзывы, отметки о чтении и история обменов. Это действие нельзя отменить.' : 'Предложенная вами книга будет удалена.'})) return;
+    try { await api(`/books/${id}/`, {method: 'DELETE'}); toast('Книга удалена'); go('/'); } catch (e) { toast(errText(e), 'danger'); }
+  });
+  if ($('#bef')) submit($('#bef'), async f => {
+    if (direct) { await api(`/books/${id}/`, {method: 'PATCH', body: f}); toast(open ? 'Сохранено. Книга отправлена на повторную проверку' : 'Книга обновлена'); }
+    else { await api(`/books/${id}/edits/`, {method: 'POST', body: f}); toast('Правка отправлена на модерацию'); }
+    em.hide(); pBook(id);
+  });
+  app.querySelectorAll('[data-edit-review]').forEach(x => x.onclick = () => { const f = $('#rv'); f.scrollIntoView({behavior: 'smooth', block: 'center'}); f.elements.text.focus(); f.classList.add('border-success'); });
+  app.querySelectorAll('[data-del-review]').forEach(x => x.onclick = async () => {
+    const own = x.dataset.own === '1';
+    if (!await confirmDialog({title: own ? 'Удалить ваш отзыв?' : 'Удалить отзыв пользователя?', text: 'Отзыв будет удалён безвозвратно, рейтинг книги пересчитается.', ok: 'Удалить', danger: true})) return;
+    try { await api(own ? `/books/${id}/review/` : `/reviews/${x.dataset.delReview}/`, {method: 'DELETE'}); toast('Отзыв удалён'); pBook(id); } catch (e) { toast(errText(e), 'danger'); }
+  });
+  if ($('#rv')) submit($('#rv'), async d => { await api(`/books/${id}/review/`, {method: 'PUT', body: {score: d.score ? +d.score : null, text: d.text}}); toast(b.my_review ? 'Отзыв обновлён' : 'Отзыв опубликован'); pBook(id); });
+}
+
+async function pShelf(q) {
+  const page = +q.get('page') || 1; loading();
+  const [d, bk] = await Promise.all([api(`/copies/?mine=1&page=${page}&page_size=${PAGE}`).then(list), api('/books/options/')]);
+  const books = bk.results;  // все одобренные книги каталога, без пагинации
+  app.innerHTML = `<h1 class="h2">Моя полка</h1>
+  <form id="add" class="panel p-3 mb-4" novalidate><h2 class="h6">Добавить экземпляр</h2><div class="row g-2">
+    <div class="col-md-5"><input class="form-control mb-2" id="bk-filter" placeholder="Найти книгу по названию или автору" aria-label="Поиск книги"><select class="form-select" id="bk-sel" name="book_id"></select></div>
+    <div class="col-md-3"><select class="form-select" name="condition">${Object.entries(COND).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+    <div class="col-md-3"><input class="form-control" name="pickup_place" placeholder="Место передачи"></div>
+    <div class="col-md-1"><button class="btn btn-pine w-100">+</button></div></div>
+    <div class="form-text mt-2">В списке все книги каталога (${books.length}). Нет нужной? <a href="#/submit">Предложите её</a> — после проверки модератором она появится здесь.</div></form>
+  ${d.results.length ? `<div class="panel"><ul class="list-group list-group-flush">${d.results.map(c => `
+    <li class="list-group-item flex flex-wrap items-center justify-between gap-2">
+      <div><a href="#/book/${c.book_id}" class="fw-bold text-reset">${esc(c.book_title)}</a><div class="small text-secondary">${esc(COND[c.condition] || c.condition)} · ${esc(c.pickup_place)}</div></div>
+      <div class="flex gap-2 items-center"><span class="badge ${c.is_active ? 'text-bg-success' : 'text-bg-secondary'}">${c.is_active ? 'Доступен' : 'Скрыт'}</span>
+      <button class="btn btn-sm btn-outline-secondary" data-tg="${c.id}" data-on="${c.is_active}">${c.is_active ? 'Скрыть' : 'Показать'}</button></div></li>`).join('')}</ul></div>` : empty('Полка пуста', 'Добавьте первую книгу — другие участники смогут её запросить.')}
+  ${pager(d.count, page, '/shelf')}`;
+  const fill = (term = '') => {
+    const t = term.trim().toLowerCase(), sel = $('#bk-sel'), cur = sel.value;
+    const items = books.filter(b => !t || (b.title + ' ' + b.author).toLowerCase().includes(t));
+    sel.innerHTML = `<option value="">Выберите книгу (${items.length} из ${books.length})</option>` + items.map(b => `<option value="${b.id}" ${String(b.id) === cur ? 'selected' : ''}>${esc(b.title)} — ${esc(b.author)}</option>`).join('');
+  };
+  fill(); $('#bk-filter').addEventListener('input', e => fill(e.target.value));
+  submit($('#add'), async f => { await api('/copies/', {method: 'POST', body: {...f, book_id: +f.book_id || null}}); toast('Экземпляр добавлен'); pShelf(q); });
+  app.querySelectorAll('[data-tg]').forEach(b => b.onclick = async () => {
+    try { await api(`/copies/${b.dataset.tg}/`, {method: 'PATCH', body: {is_active: b.dataset.on !== 'true'}}); pShelf(q); }
+    catch (e) { toast(errText(e), 'danger'); } });
+}
+
+async function pLoans(q) {
+  const box = q.get('box') || 'incoming', page = +q.get('page') || 1; loading();
+  const d = list(await api(`/loans/?box=${box}&page=${page}&page_size=${PAGE}`));
+  const role = l => me.username === l.owner ? 'owner' : 'borrower';
+  const tel = p => p ? `<a href="tel:${esc(p)}">${esc(p)}</a>` : '<span class="text-secondary">не указан</span>';
+  const acts = l => {
+    const a = [];
+    if (role(l) === 'owner') {
+      if (l.status === 'pending') a.push(['accept', 'Принять', 'pine'], ['reject', 'Отклонить', 'outline-secondary']);
+      if (l.status === 'accepted') a.push(['hand-over', 'Отметить передачу', 'pine'], ['cancel', 'Отменить', 'outline-secondary']);
+      if (l.status === 'handed_over') a.push(['return', 'Отметить возврат', 'pine']);
+    } else if (['pending', 'accepted'].includes(l.status)) a.push(['cancel', 'Отменить', 'outline-secondary']);
+    return a.map(([k, t, c]) => `<button class="btn btn-sm btn-${c}" data-act="${k}" data-id="${l.id}" data-book="${esc(l.book_title)}">${t}</button>`).join('');
+  };
+  const due = l => l.status !== 'handed_over' ? '' : l.days_left < 0 ? `<span class="badge text-bg-danger">Просрочено на ${-l.days_left} дн.</span>`
+    : l.days_left <= 2 ? `<span class="badge text-bg-warning">Вернуть ${l.days_left === 0 ? 'сегодня' : 'через ' + l.days_left + ' дн.'}</span>` : `<span class="badge bg-body-secondary text-body border">Осталось ${l.days_left} дн.</span>`;
+  const tabs = [['incoming', 'Входящие'], ['outgoing', 'Исходящие'], ['active', 'На руках']];
+  app.innerHTML = `<h1 class="h2">Обмены</h1>
+  <ul class="nav nav-pills mb-3">${tabs.map(([k, t]) => `<li class="nav-item"><a class="nav-link ${box === k ? 'active bg-success' : 'text-success'}" href="#/loans?box=${k}">${t}</a></li>`).join('')}</ul>
+  ${d.results.length ? d.results.map(l => {
+    const [t, c] = LOAN[l.status] || [l.status, 'secondary'], r = role(l);
+    return `<div class="panel p-3 mb-2 flex flex-wrap items-center justify-between gap-2">
+      <div><div class="fw-bold">${esc(l.book_title)}</div>
+      <div class="small text-secondary">${r === 'owner' ? 'Получатель: ' + esc(l.borrower) : 'Владелец: ' + esc(l.owner)} · вернуть до ${esc(l.requested_return_date || '—')}</div>
+      <div class="small">${r === 'owner' ? 'Телефон получателя: ' + tel(l.borrower_phone) : (l.owner_phone ? 'Телефон владельца: ' + tel(l.owner_phone) : 'Телефон владельца появится после принятия запроса, если он указан в профиле.')}</div>
+      <span class="badge text-bg-${c}">${t}</span> ${due(l)}</div>
+      <div class="flex gap-2">${acts(l)}</div></div>`; }).join('')
+    : empty(box === 'incoming' ? 'Входящих запросов нет' : box === 'outgoing' ? 'Вы ещё ничего не запрашивали' : 'Сейчас нет книг на руках', box === 'active' ? 'Здесь отображаются книги, которые переданы и ещё не возвращены, со сроком возврата.' : 'Загляните в каталог и выберите книгу.')}
+  ${pager(d.count, page, `/loans?box=${box}`)}`;
+  app.querySelectorAll('[data-act]').forEach(b => b.onclick = async () => {
+    const ask = {reject: ['Отклонить запрос?', 'Заёмщик увидит, что запрос отклонён.', 'Отклонить'], cancel: ['Отменить обмен?', 'Запрос на «' + b.dataset.book + '» будет отменён.', 'Отменить обмен']}[b.dataset.act];
+    if (ask && !await confirmDialog({title: ask[0], text: ask[1], ok: ask[2], danger: true})) return;
+    b.disabled = true;
+    try { await api(`/loans/${b.dataset.id}/${b.dataset.act}/`, {method: 'POST'}); toast('Готово'); pLoans(q); refreshAlerts(); }
+    catch (e) { toast(errText(e), 'danger'); b.disabled = false; } });
+}
+
+const goalCard = (label, g, p) => `<div class="panel p-3 h-100"><div class="flex justify-between items-center"><strong>${label}</strong>${g ? `<button class="btn btn-sm btn-link text-danger p-0" data-goal-del="${p}">Удалить</button>` : ''}</div>${g
+  ? `<div class="progress my-2" role="progressbar" aria-valuenow="${g.percent}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar bg-success" style="width:${g.percent}%">${g.percent}%</div></div><div class="small">${g.done} из ${g.target} книг${g.achieved ? ' — цель достигнута!' : ', осталось ' + g.left}</div>`
+  : '<div class="small text-secondary mt-2">Цель не задана</div>'}</div>`;
+
+async function pReading() {
+  loading();
+  const [d, goals] = await Promise.all([api('/reading/'), api('/goals/')]); const items = d.results || d.items || d;
+  const cnt = k => items.filter(i => i.status === k).length;
+  app.innerHTML = `<h1 class="h2">Моё чтение</h1>
+  <div class="grid grid-cols-3 gap-3 mb-4">${Object.entries(READ).map(([k, v]) => `<div class="panel p-3 text-center"><div class="h3 mb-0">${cnt(k)}</div><div class="small text-secondary">${v}</div></div>`).join('')}</div>
+  <h2 class="h5">Цели чтения</h2>
+  <div class="grid md:grid-cols-2 gap-3 mb-3">${goalCard('На этот год', goals.year, 'year')}${goalCard('На этот месяц', goals.month, 'month')}</div>
+  <form id="gf" class="flex flex-wrap gap-2 items-center mb-4" novalidate><select class="form-select" style="width:auto" name="period" aria-label="Период"><option value="year">На год</option><option value="month">На месяц</option></select><input class="form-control" style="width:120px" type="number" name="target" min="1" max="365" placeholder="Книг"><button class="btn btn-pine">Поставить цель</button></form>
+  ${d.finished_this_month !== undefined ? `<p class="text-secondary">Прочитано в этом месяце: <strong>${d.finished_this_month}</strong></p>` : ''}
+  ${items.length ? `<div class="panel"><ul class="list-group list-group-flush">${items.map(i => `
+    <li class="list-group-item flex flex-wrap items-center justify-between gap-2">
+      <div><a href="#/book/${i.book_id}" class="fw-bold text-reset">${esc(i.book_title)}</a>${i.finished_at ? `<div class="small text-secondary">Завершено: ${esc(i.finished_at)}</div>` : ''}</div>
+      <select class="form-select form-select-sm" style="width:auto" data-b="${i.book_id}" aria-label="Статус">${Object.entries(READ).map(([k, v]) => `<option value="${k}" ${i.status === k ? 'selected' : ''}>${v}</option>`).join('')}</select></li>`).join('')}</ul></div>`
+    : empty('Список пуст', 'Откройте страницу книги и выберите статус чтения.')}`;
+  submit($('#gf'), async f => { await api('/goals/', {method: 'PUT', body: {period: f.period, target: +f.target || null}}); toast('Цель сохранена'); pReading(); });
+  app.querySelectorAll('[data-goal-del]').forEach(b => b.onclick = async () => { if (!await confirmDialog({title: 'Удалить цель?', text: 'Прогресс по этой цели перестанет отображаться.', ok: 'Удалить', danger: true})) return; try { await api(`/goals/${b.dataset.goalDel}/`, {method: 'DELETE'}); pReading(); } catch (e) { toast(errText(e), 'danger'); } });
+  app.querySelectorAll('[data-b]').forEach(s => s.onchange = async () => {
+    try { await api(`/reading/${s.dataset.b}/`, {method: 'PUT', body: {status: s.value}}); toast('Статус обновлён'); pReading(); }
+    catch (e) { toast(errText(e), 'danger'); } });
+}
+
+async function pModeration(q) {
+  const tab = q.get('tab') || 'books', page = +q.get('page') || 1; loading();
+  const tabs = [['books', 'Новые книги'], ['edits', 'Правки'], ['reviews', 'Рецензии']];
+  const url = {books: '/moderation/books/', edits: '/moderation/edits/', reviews: '/reviews/?moderation=1'}[tab];
+  const d = list(await api(`${url}${url.includes('?') ? '&' : '?'}page=${page}&page_size=${PAGE}`));
+  const btns = (kind, id) => `<div class="flex gap-2"><button class="btn btn-sm btn-pine" data-${kind}="approve" data-id="${id}">Одобрить</button><button class="btn btn-sm btn-outline-danger" data-${kind}="reject" data-id="${id}">Отклонить</button></div>`;
+  const FN = {title: 'Название', author: 'Автор', genre: 'Жанр', description: 'Описание', cover: 'Обложка'};
+  const body = {
+    books: () => d.results.length ? d.results.map(b => `<div class="panel p-3 mb-2 flex flex-wrap items-start justify-between gap-2"><div style="max-width:60ch">
+        <div class="fw-bold">${esc(b.title)} <span class="text-secondary fw-normal">— ${esc(b.author)}</span></div><div class="small text-secondary">${esc(b.genre)} · предложил(а): ${esc(b.created_by || '—')}</div>
+        <div class="mt-1">${esc(b.description) || '<span class="text-secondary">Описание не указано</span>'}</div>${b.cover ? `<div class="small mt-1"><a href="${esc(b.cover)}" target="_blank" rel="noopener">Обложка</a></div>` : ''}</div>${btns('mb', b.id)}</div>`).join('')
+      : empty('Очередь пуста', 'Новых книг на модерации нет.'),
+    edits: () => d.results.length ? d.results.map(e => `<div class="panel p-3 mb-2 flex flex-wrap items-start justify-between gap-2"><div style="max-width:70ch">
+        <div class="fw-bold"><a class="text-reset" href="#/book/${e.book_id}">${esc(e.book_title)}</a> <span class="text-secondary fw-normal">· правка от ${esc(e.proposed_by || '—')}</span></div>
+        ${Object.keys(FN).filter(f => (e[f] || '') !== (e.current[f] || '')).map(f => `<div class="small mt-1"><strong>${FN[f]}:</strong> <span class="text-decoration-line-through text-secondary">${esc(e.current[f]) || '—'}</span> → ${esc(e[f]) || '—'}</div>`).join('')}</div>${btns('me', e.id)}</div>`).join('')
+      : empty('Правок на проверке нет'),
+    reviews: () => d.results.length ? d.results.map(r => `<div class="panel p-3 mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div><strong>${esc(r.user)}</strong> о «${esc(r.book_title)}» ${starsHtml(r.score)} <small class="text-secondary">${fmtScore(r.score)}</small><div class="${r.is_hidden ? 'text-decoration-line-through text-secondary' : ''}">${esc(r.text)}</div></div>
+        <div class="flex gap-2"><button class="btn btn-sm ${r.is_hidden ? 'btn-outline-success' : 'btn-outline-secondary'}" data-h="${r.id}" data-v="${r.is_hidden}">${r.is_hidden ? 'Показать' : 'Скрыть'}</button>
+        ${isAdmin() ? `<button class="btn btn-sm btn-outline-danger" data-rd="${r.id}">Удалить</button>` : ''}</div></div>`).join('') : empty('Рецензий пока нет'),
+  }[tab]();
+  app.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-2 mb-3"><h1 class="h2 mb-0">Модерация</h1><a class="btn btn-pine" href="#/submit">Добавить книгу</a></div>
+  <ul class="nav nav-pills mb-3">${tabs.map(([k, t]) => `<li class="nav-item"><a class="nav-link ${tab === k ? 'active bg-success' : 'text-success'}" href="#/moderation?tab=${k}">${t}</a></li>`).join('')}</ul>
+  ${body}${pager(d.count, page, `/moderation?tab=${tab}`)}`;
+  const decide = (sel, base, ok1, no1, askTitle) => app.querySelectorAll(sel).forEach(b => b.onclick = async () => {
+    const act = b.dataset[sel.slice(6, 8)]; let reason = '';
+    if (act === 'reject') { const r = await confirmDialog({title: askTitle, text: 'Укажите причину — автор увидит её на странице «Предложить книгу».', ok: 'Отклонить', danger: true, input: 'Причина (необязательно)'}); if (!r) return; reason = r.value; }
+    try { await api(`${base}/${b.dataset.id}/${act}/`, {method: 'POST', body: {reason}}); toast(act === 'approve' ? ok1 : no1); pModeration(q); } catch (e) { toast(errText(e), 'danger'); } });
+  decide('[data-mb]', '/moderation/books', 'Книга опубликована', 'Книга отклонена', 'Отклонить книгу?');
+  decide('[data-me]', '/moderation/edits', 'Правка применена', 'Правка отклонена', 'Отклонить правку?');
+  app.querySelectorAll('[data-h]').forEach(b => b.onclick = async () => {
+    try { await api(`/reviews/${b.dataset.h}/`, {method: 'PATCH', body: {is_hidden: b.dataset.v !== 'true'}}); pModeration(q); } catch (e) { toast(errText(e), 'danger'); } });
+  app.querySelectorAll('[data-rd]').forEach(b => b.onclick = async () => {
+    if (!await confirmDialog({title: 'Удалить рецензию?', text: 'Рецензия будет удалена безвозвратно, рейтинг книги пересчитается.', ok: 'Удалить', danger: true})) return;
+    try { await api(`/reviews/${b.dataset.rd}/`, {method: 'DELETE'}); toast('Рецензия удалена'); pModeration(q); } catch (e) { toast(errText(e), 'danger'); } });
+}
+
+function pAuth(mode) {
+  const reg = mode === 'register';
+  app.innerHTML = `<div class="mx-auto" style="max-width:420px"><h1 class="h2">${reg ? 'Регистрация' : 'Вход'}</h1>
+  <form id="af" class="panel p-4" novalidate>
+    <label class="form-label">Логин</label><input class="form-control mb-3" name="username" autocomplete="username">
+    ${reg ? '<label class="form-label">Email</label><input class="form-control mb-3" name="email" type="email">' : ''}
+    <label class="form-label">Пароль</label><input class="form-control mb-3" name="password" type="password" autocomplete="${reg ? 'new' : 'current'}-password">
+    ${reg ? '' : '<div class="text-end mb-3"><a class="small" href="#/forgot">Забыли пароль?</a></div>'}
+    <button class="btn btn-pine w-100">${reg ? 'Создать аккаунт' : 'Войти'}</button></form>
+  <div id="gwrap" class="mt-3 text-center" hidden><div class="small text-secondary mb-2">или</div><div id="gbtn" class="flex justify-center"></div></div>
+  <p class="mt-3 small">${reg ? 'Уже есть аккаунт? <a href="#/login">Войти</a>' : 'Нет аккаунта? <a href="#/register">Зарегистрироваться</a>'}</p></div>`;
+  submit($('#af'), async f => {
+    const d = await api(reg ? '/auth/register/' : '/auth/login/', {method: 'POST', body: f});
+    localStorage.setItem('bc_token', d.token); me = await api('/auth/me/'); renderNav(); toast('Добро пожаловать!'); go('/');
+  });
+  googleButton('#gbtn', '#gwrap', async cred => {
+    try {
+      const d = await api('/auth/google/', {method: 'POST', body: {credential: cred}});
+      localStorage.setItem('bc_token', d.token); me = await api('/auth/me/'); renderNav(); toast('Добро пожаловать!'); go('/');
+    } catch (e) { toast(errText(e), 'danger'); }
+  });
+}
+
+/* ---- Google Identity Services: кнопка входа/привязки ---- */
+let gReady = null, gHandler = null;
+async function googleButton(sel, wrap, handler) {
+  try {
+    if (!gReady) gReady = (async () => {
+      const cfg = await api('/auth/google/config/');
+      if (!cfg.client_id) return false;
+      await new Promise((ok, no) => { const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.onload = ok; s.onerror = no; document.head.appendChild(s); });
+      google.accounts.id.initialize({client_id: cfg.client_id, callback: r => gHandler && gHandler(r.credential)});
+      return true;
+    })();
+    if (!(await gReady)) return false;
+    const el = $(sel); if (!el) return false;  // страница могла смениться, пока грузился скрипт
+    gHandler = handler; if (wrap) $(wrap).hidden = false;
+    google.accounts.id.renderButton(el, {theme: 'outline', size: 'large', text: 'continue_with', width: 300, locale: 'ru'});
+    return true;
+  } catch { gReady = null; return false; }
+}
+
+function pForgot() {
+  app.innerHTML = `<div class="mx-auto" style="max-width:420px"><h1 class="h2">Восстановление пароля</h1>
+  <form id="ff" class="panel p-4" novalidate><p class="text-secondary small">Укажите email, с которым вы регистрировались. В режиме разработки письмо с кодом печатается в терминале, где запущен сервер: почта и Gmail не используются.</p>
+    <label class="form-label">Email</label><input class="form-control mb-3" name="email" type="email" autocomplete="email">
+    <button class="btn btn-pine w-100">Отправить код</button></form>
+  <p class="mt-3 small"><a href="#/login">Вернуться ко входу</a> · <a href="#/reset">У меня уже есть код</a></p></div>`;
+  submit($('#ff'), async f => {
+    const d = await api('/auth/password-reset/', {method: 'POST', body: f});
+    toast(d.detail); go('/reset?email=' + encodeURIComponent(f.email));
+  });
+}
+
+function pReset(q) {
+  app.innerHTML = `<div class="mx-auto" style="max-width:420px"><h1 class="h2">Новый пароль</h1>
+  <form id="rf" class="panel p-4" novalidate>
+    <label class="form-label">Email</label><input class="form-control mb-3" name="email" type="email" value="${esc(q.get('email') || '')}">
+    <label class="form-label">Код из письма</label><input class="form-control mb-3" name="code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" value="${esc(q.get('code') || '')}" placeholder="6 цифр">
+    <label class="form-label">Новый пароль</label><input class="form-control mb-3" name="password" type="password" autocomplete="new-password">
+    <label class="form-label">Повторите пароль</label><input class="form-control mb-3" name="password2" type="password" autocomplete="new-password">
+    <button class="btn btn-pine w-100">Сохранить пароль</button></form>
+  <p class="mt-3 small">Код действует 10 минут. <a href="#/forgot">Отправить новый код</a></p></div>`;
+  submit($('#rf'), async f => {
+    if (f.password !== f.password2) throw {status: 400, data: {password2: 'Пароли не совпадают.'}};
+    await api('/auth/password-reset/confirm/', {method: 'POST', body: {email: f.email, code: f.code.trim(), password: f.password}});
+    toast('Пароль изменён. Войдите с новым паролем.'); go('/login');
+  });
+}
+
+async function pProfile() {
+  loading(); me = await api('/auth/me/');
+  app.innerHTML = `<div class="mx-auto" style="max-width:480px"><h1 class="h2">Профиль</h1>
+  <form id="pf" class="panel p-4"><label class="form-label">Логин</label><input class="form-control mb-3" value="${esc(me.username)}" disabled>
+    <label class="form-label">Email</label><input class="form-control mb-3" name="email" type="email" value="${esc(me.email)}">
+    <label class="form-label">Телефон</label><input class="form-control mb-1" name="phone" type="tel" value="${esc(me.phone || '')}" placeholder="+996 555 123 456"><div class="form-text mb-3">Нужен, чтобы владелец мог связаться с вами при получении книги (виден только участнику обмена).</div>
+    <label class="form-label">О себе</label><textarea class="form-control mb-3" name="bio" rows="3">${esc(me.bio)}</textarea>
+    <div class="small text-secondary mb-3">Роль: ${esc(me.role)}</div><button class="btn btn-pine">Сохранить профиль</button></form>
+  <div class="panel p-4 mt-3"><h2 class="h5">Google-аккаунт</h2>
+    ${me.google_email
+      ? `<p class="mb-2">Привязан: <strong>${esc(me.google_email)}</strong></p>${me.has_password ? '' : '<p class="small text-secondary">Пароль не задан: чтобы отвязать Google, сначала задайте пароль через «Забыли пароль?» на странице входа.</p>'}<button class="btn btn-sm btn-outline-danger" id="gun">Отвязать</button>`
+      : `<p class="small text-secondary">Привяжите Google, чтобы входить на сайт одним нажатием.</p><div id="gbtn2"></div><div id="gnote" class="small text-secondary" hidden>Вход через Google не настроен на сервере (GOOGLE_CLIENT_ID).</div>`}
+  </div></div>`;
+  submit($('#pf'), async f => { me = await api('/auth/me/', {method: 'PATCH', body: f}); toast('Профиль обновлён'); });
+  if (me.google_email) $('#gun').onclick = async () => {
+    try { await api('/auth/google/unlink/', {method: 'POST'}); toast('Google отвязан'); pProfile(); }
+    catch (e) { toast(errText(e), 'danger'); }
+  };
+  else googleButton('#gbtn2', null, async cred => {
+    try { await api('/auth/google/link/', {method: 'POST', body: {credential: cred}}); toast('Google-аккаунт привязан'); pProfile(); }
+    catch (e) { toast(errText(e), 'danger'); }
+  }).then(ok => { if (!ok && $('#gnote')) $('#gnote').hidden = false; });
+}
+
+const BST = {pending: ['warning', 'На модерации'], approved: ['success', 'Опубликована'], rejected: ['danger', 'Отклонена'], hidden: ['secondary', 'Скрыта']};
+
+async function pSubmit(q) {
+  loading();
+  const [gen, sub] = await Promise.all([api('/genres/'), api('/submissions/')]);
+  app.innerHTML = `<h1 class="h2">Предложить книгу</h1>
+  <p class="text-secondary">${isMod() ? 'Книги модераторов публикуются сразу.' : 'Новая книга появится в каталоге после проверки модератором. Исправить данные существующей книги можно на её странице — кнопка «Предложить правку».'}</p>
+  <form id="sf" class="panel p-3 mb-4" novalidate><div class="row g-2">
+    <div class="col-md-5"><input class="form-control" name="title" placeholder="Название"></div>
+    <div class="col-md-4"><input class="form-control" name="author" placeholder="Автор"></div>
+    <div class="col-md-3"><input class="form-control" name="genre" list="gl3" placeholder="Жанр" autocomplete="off"><datalist id="gl3">${gen.results.map(x => `<option value="${esc(x)}">`).join('')}</datalist></div>
+    <div class="col-12"><input class="form-control" name="cover" placeholder="URL обложки (необязательно)"></div>
+    <div class="col-12"><textarea class="form-control" name="description" rows="3" placeholder="Описание"></textarea></div></div>
+    <button class="btn btn-pine mt-2">${isMod() ? 'Добавить книгу' : 'Отправить на модерацию'}</button></form>
+  <h2 class="h5">Мои предложения</h2>
+  ${sub.books.length ? sub.books.map(b => `<div class="panel p-3 mb-2 flex flex-wrap items-center justify-between gap-2"><div>
+      <div class="fw-bold">${b.status === 'hidden' ? esc(b.title) : `<a class="text-reset" href="#/book/${b.id}">${esc(b.title)}</a>`} <span class="badge text-bg-${BST[b.status][0]}">${BST[b.status][1]}</span></div>
+      <div class="small text-secondary">${esc(b.author)} · ${esc(b.genre)}</div>
+      ${b.status === 'rejected' && b.reject_reason ? `<div class="small text-danger">Причина: ${esc(b.reject_reason)}</div>` : ''}</div>
+      ${['pending', 'rejected'].includes(b.status) ? `<button class="btn btn-sm btn-outline-danger" data-del="${b.id}" data-t="${esc(b.title)}">Удалить</button>` : ''}</div>`).join('') : empty('Вы пока ничего не предлагали')}
+  ${sub.edits.length ? `<h2 class="h5 mt-4">Мои правки</h2>${sub.edits.map(e => `<div class="panel p-3 mb-2"><div class="fw-bold"><a class="text-reset" href="#/book/${e.book_id}">${esc(e.book_title)}</a> <span class="badge text-bg-${BST[e.status][0]}">${BST[e.status][1]}</span></div>
+      ${e.status === 'rejected' && e.reject_reason ? `<div class="small text-danger">Причина: ${esc(e.reject_reason)}</div>` : ''}</div>`).join('')}` : ''}`;
+  submit($('#sf'), async f => {
+    const r = await api('/books/', {method: 'POST', body: f});
+    toast(r.status === 'approved' ? 'Книга добавлена в каталог' : 'Книга отправлена на модерацию'); pSubmit(q);
+  });
+  app.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+    if (!await confirmDialog({title: 'Удалить предложенную книгу?', text: `«${b.dataset.t}» будет удалена без возможности восстановления.`, ok: 'Удалить', danger: true})) return;
+    try { await api(`/books/${b.dataset.del}/`, {method: 'DELETE'}); toast('Удалено'); pSubmit(q); } catch (e) { toast(errText(e), 'danger'); } });
+}
+
+function meetingActions(m) {
+  if (m.is_cancelled || m.is_past) return '';
+  const b = (act, t, c) => `<button class="btn btn-sm btn-${c}" data-m="${act}" data-id="${m.id}">${t}</button>`;
+  let h = '';
+  if (m.is_organizer || isMod()) h += b('cancel', 'Отменить встречу', 'outline-danger');
+  if (m.is_joined && !m.is_organizer) h += b('leave', 'Не пойду', 'outline-secondary');
+  if (!m.is_joined && !m.is_full) h += b('join', 'Пойду', 'pine');
+  return h;
+}
+
+async function pMeetings(q) {
+  const when = q.get('when') || 'upcoming', page = +q.get('page') || 1; loading();
+  const [d, books] = await Promise.all([api(`/meetings/?when=${when}&page=${page}&page_size=${PAGE}`).then(list), api('/books/options/')]);
+  const tabs = [['upcoming', 'Предстоящие'], ['mine', 'Мои'], ['past', 'Прошедшие']];
+  app.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-2 mb-3"><h1 class="h2 mb-0">Книжные встречи</h1>
+    <button class="btn btn-pine" data-bs-toggle="collapse" data-bs-target="#mf">Назначить встречу</button></div>
+  <form id="mf" class="panel p-3 mb-4 collapse" novalidate><div class="row g-2">
+    <div class="col-md-6"><input class="form-control" name="title" placeholder="Название встречи"></div>
+    <div class="col-md-6"><select class="form-select" name="book_id"><option value="">Книга (необязательно)</option>${books.results.map(b => `<option value="${b.id}">${esc(b.title)} — ${esc(b.author)}</option>`).join('')}</select></div>
+    <div class="col-md-4"><input class="form-control" type="datetime-local" name="starts_at" aria-label="Дата и время"></div>
+    <div class="col-md-5"><input class="form-control" name="place" placeholder="Место"></div>
+    <div class="col-md-3"><input class="form-control" type="number" min="1" name="capacity" placeholder="Мест (необязательно)"></div>
+    <div class="col-12"><textarea class="form-control" name="description" rows="2" placeholder="О чём поговорим"></textarea></div></div>
+    <button class="btn btn-pine mt-2">Создать встречу</button></form>
+  <ul class="nav nav-pills mb-3">${tabs.map(([k, t]) => `<li class="nav-item"><a class="nav-link ${when === k ? 'active bg-success' : 'text-success'}" href="#/meetings?when=${k}">${t}</a></li>`).join('')}</ul>
+  ${d.results.length ? d.results.map(m => `<div class="panel p-3 mb-2">
+    <div class="flex flex-wrap items-start justify-between gap-2"><div>
+      <div class="fw-bold">${esc(m.title)} ${m.is_cancelled ? '<span class="badge text-bg-danger">Отменена</span>' : ''}${m.is_organizer ? ' <span class="badge text-bg-info">Вы организатор</span>' : (m.is_joined ? ' <span class="badge text-bg-success">Вы участвуете</span>' : '')}${m.is_full && !m.is_joined && !m.is_past ? ' <span class="badge text-bg-secondary">Мест нет</span>' : ''}</div>
+      <div class="small text-secondary">${esc(fmtDt(m.starts_at))} · ${esc(m.place)}${m.book_id ? ` · <a href="#/book/${m.book_id}">${esc(m.book_title)}</a>` : ''}</div>
+      <div class="small">Организатор: ${esc(m.organizer)} · Участников: ${m.participants_count}${m.capacity ? ' из ' + m.capacity : ''}</div></div>
+    <div class="flex gap-2">${meetingActions(m)}</div></div>
+    ${m.description ? `<div class="mt-2">${esc(m.description)}</div>` : ''}</div>`).join('')
+    : empty(when === 'mine' ? 'Вы пока не записаны ни на одну встречу' : when === 'past' ? 'Прошедших встреч нет' : 'Предстоящих встреч нет', 'Назначьте встречу сами — кнопка выше.')}
+  ${pager(d.count, page, `/meetings?when=${when}`)}`;
+  submit($('#mf'), async f => {
+    await api('/meetings/', {method: 'POST', body: {title: f.title, description: f.description, place: f.place,
+      starts_at: f.starts_at ? new Date(f.starts_at).toISOString() : '', book_id: +f.book_id || null, capacity: f.capacity ? +f.capacity : null}});
+    toast('Встреча создана');
+    const t = '#/meetings?when=upcoming'; if (location.hash === t) pMeetings(new URLSearchParams('when=upcoming')); else location.hash = t;
+  });
+  app.querySelectorAll('[data-m]').forEach(b => b.onclick = async () => {
+    if (b.dataset.m === 'cancel' && !await confirmDialog({title: 'Отменить встречу?', text: 'Встреча будет отменена для всех участников.', ok: 'Отменить встречу', danger: true})) return;
+    b.disabled = true;
+    try { await api(`/meetings/${b.dataset.id}/${b.dataset.m}/`, {method: 'POST'}); toast('Готово'); pMeetings(q); }
+    catch (e) { toast(errText(e), 'danger'); b.disabled = false; } });
+}
+
+const errPage = (c, t, s) => app.innerHTML = `<div class="text-center py-5"><div class="display-1 brand">${c}</div><h1 class="h4">${t}</h1><p class="text-secondary">${s}</p><a class="btn btn-pine" href="#/">В каталог</a></div>`;
+
+/* ===================== РОУТЕР ===================== */
+const needAuth = ['/shelf', '/loans', '/meetings', '/reading', '/submit', '/profile', '/moderation'];
+async function route() {
+  rid++;
+  const [path, qs] = (location.hash.slice(1) || '/').split('?'); const q = new URLSearchParams(qs || '');
+  renderNav();
+  if (me) refreshAlerts();
+  if (needAuth.includes(path) && !me) return go('/login');
+  if (path === '/moderation' && !isMod()) return errPage(403, 'Нет доступа', 'Этот раздел доступен только модераторам.');
+  try {
+    let m;
+    if (path === '/') await pCatalog(q);
+    else if ((m = path.match(/^\/book\/(\d+)$/))) await pBook(m[1]);
+    else if (path === '/shelf') await pShelf(q);
+    else if (path === '/loans') await pLoans(q);
+    else if (path === '/meetings') await pMeetings(q);
+    else if (path === '/submit') await pSubmit(q);
+    else if (path === '/reading') await pReading();
+    else if (path === '/moderation') await pModeration(q);
+    else if (path === '/login' || path === '/register') pAuth(path.slice(1));
+    else if (path === '/forgot') pForgot();
+    else if (path === '/reset') pReset(q);
+    else if (path === '/profile') await pProfile();
+    else errPage(404, 'Страница не найдена', 'Проверьте адрес или вернитесь в каталог.');
+  } catch (e) {
+    if (e.status === 401) { localStorage.removeItem('bc_token'); me = null; return go('/login'); }
+    if (e.status === 403) return errPage(403, 'Нет доступа', errText(e));
+    if (e.status === 404) return errPage(404, 'Не найдено', errText(e));
+    app.innerHTML = `<div class="alert alert-danger">${esc(errText(e))}</div>`;
+  }
+}
+window.addEventListener('hashchange', route);
+(async () => {
+  if (localStorage.getItem('bc_token')) { try { me = await api('/auth/me/'); } catch { localStorage.removeItem('bc_token'); } }
+  route();
+})();
+</script>
+</body>
+</html>
