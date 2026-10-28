@@ -4,12 +4,13 @@ Django + DRF (бэкенд, `core/`) и SPA на Bootstrap + Tailwind (`frontend
 
 ## Запуск на чистой базе
 ```bash
-python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
+python -m venv venv
+venv/bin/activate      
 pip install -r requirements.txt
 python manage.py migrate
-python manage.py seed            # без этого шага каталог будет пустым!  # 15 книг, 20 экземпляров, 5 участников, 10 передач, 10 отзывов
-python manage.py runserver       # сайт: http://127.0.0.1:8000/  ·  API: /api/  ·  админка: /admin/
-python manage.py test            # автотесты
+python manage.py seed            
+python manage.py runserver      
+python manage.py test            
 ```
 Фронтенд отдаётся самим Django на главной странице, отдельный сервер не нужен. Если адрес API другой — поменяйте `API` в начале скрипта `frontend/index.html`.
 
