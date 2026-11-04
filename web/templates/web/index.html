@@ -1,0 +1,52 @@
+{% load static %}<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BookCircle — книжный клуб и обмен книгами</title>
+<meta name="description" content="BookCircle — общая библиотека вашего сообщества: обмен книгами, книжные встречи, цели чтения и рекомендации.">
+<meta property="og:title" content="BookCircle — книжный клуб и обмен книгами">
+<meta property="og:description" content="Обменивайтесь книгами, ходите на книжные встречи и ставьте цели чтения.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#1c2b33">
+<link rel="icon" type="image/svg+xml" href="{% static 'web/img/favicon.svg' %}">
+<script src="{% static 'web/js/theme-init.js' %}"></script>
+<link rel="stylesheet" href="{% static 'web/vendor/bootstrap/bootstrap.min.css' %}">
+<link rel="stylesheet" href="{% static 'web/css/fonts.css' %}">
+<link rel="stylesheet" href="{% static 'web/css/tailwind.css' %}">
+<link rel="stylesheet" href="{% static 'web/css/app.css' %}">
+</head>
+<body>
+<a class="skip-link" href="#app">Перейти к содержимому</a>
+<nav class="navbar navbar-expand-lg navbar-dark">
+  <div class="container">
+    <a class="brand" href="#/"><img src="{% static 'web/img/logo.svg' %}" alt="">BookCircle</a>
+    <button class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#nav" aria-label="Меню"><span class="navbar-toggler-icon"></span></button>
+    <div class="collapse navbar-collapse" id="nav"><ul class="navbar-nav me-auto" id="menu"></ul><div id="auth-box" class="flex items-center gap-2"></div></div>
+  </div>
+</nav>
+<div class="container pt-3" id="alerts"></div>
+<main class="container py-4" id="app" aria-live="polite"></main>
+<footer class="site-footer"><div class="container flex flex-wrap justify-between gap-2">
+  <span>© BookCircle · книжный клуб и обмен книгами</span>
+  <span><a href="/legal/terms/">Условия использования</a> · <a href="/legal/privacy/">Конфиденциальность</a> · <a href="/api/docs/">API</a></span>
+</div></footer>
+<div id="toast"></div>
+<div class="modal fade" id="cm" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title" id="cm-title"></h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button></div>
+  <div class="modal-body" id="cm-body"></div>
+  <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button><button type="button" class="btn btn-pine" id="cm-ok"></button></div>
+</div></div></div>
+<script src="{% static 'web/vendor/bootstrap/bootstrap.bundle.min.js' %}"></script>
+<script src="{% static 'web/js/core.js' %}"></script>
+<script src="{% static 'web/js/catalog.js' %}"></script>
+<script src="{% static 'web/js/exchange.js' %}"></script>
+<script src="{% static 'web/js/meetings.js' %}"></script>
+<script src="{% static 'web/js/reading.js' %}"></script>
+<script src="{% static 'web/js/notifications.js' %}"></script>
+<script src="{% static 'web/js/moderation.js' %}"></script>
+<script src="{% static 'web/js/stats.js' %}"></script>
+<script src="{% static 'web/js/account.js' %}"></script>
+<script src="{% static 'web/js/router.js' %}"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "name": "bookcircle-ui-checks",
+  "private": true,
+  "description": "Проверки интерфейса в jsdom против запущенного сервера",
+  "scripts": {"smoke": "node smoke.js", "flows": "node flows.js", "test": "node smoke.js && node flows.js"},
+  "dependencies": {"jsdom": "^26.0.0"}
+}

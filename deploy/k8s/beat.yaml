@@ -1,0 +1,16 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: beat}
+spec:
+  replicas: 1          # планировщик строго в одном экземпляре
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app: beat}}
+  template:
+    metadata: {labels: {app: beat}}
+    spec:
+      containers:
+        - name: beat
+          image: bookcircle:latest
+          command: ["celery", "-A", "config", "beat", "-l", "info", "--schedule", "/tmp/celerybeat-schedule"]
+          envFrom: [{configMapRef: {name: bookcircle-config}}, {secretRef: {name: bookcircle-secret}}]
+          resources: {requests: {cpu: 50m, memory: 128Mi}, limits: {cpu: 200m, memory: 256Mi}}

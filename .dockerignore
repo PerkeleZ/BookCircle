@@ -1,0 +1,14 @@
+.git
+.github
+.venv
+__pycache__/
+*.pyc
+db.sqlite3
+staticfiles/
+frontend-src/node_modules/
+*.zip
+.env
+docs/
+loadtest/
+deploy/k8s/
+tests_ui/

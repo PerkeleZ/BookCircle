@@ -1,0 +1,13 @@
+apiVersion: batch/v1
+kind: Job
+metadata: {name: migrate}
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: bookcircle:latest
+          command: ["python", "manage.py", "migrate", "--noinput"]
+          envFrom: [{configMapRef: {name: bookcircle-config}}, {secretRef: {name: bookcircle-secret}}]

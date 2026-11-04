@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: bookcircle-config}
+data:
+  DJANGO_SETTINGS_MODULE: config.settings.prod
+  ALLOWED_HOSTS: books.example.com
+  CSRF_TRUSTED_ORIGINS: https://books.example.com
+  FRONTEND_URL: https://books.example.com
+  POSTGRES_HOST: postgres.internal
+  REDIS_URL: redis://redis.internal:6379/0
+  CELERY_BROKER_URL: redis://redis.internal:6379/1
+  SECURE_SSL_REDIRECT: "0"        # TLS завершается на ingress
+  SECURE_COOKIES: "1"
+  SECURE_HSTS_SECONDS: "31536000"
+  EMAIL_BACKEND: django.core.mail.backends.smtp.EmailBackend
+  EMAIL_HOST: smtp.example.com
+  WEB_CONCURRENCY: "3"
